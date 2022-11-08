@@ -69,6 +69,26 @@ func GetElfMachinesInCluster(
 	return machines, nil
 }
 
+func GetElfMachinesInMachineTemplate(
+	ctx context.Context,
+	controllerClient client.Client,
+	namespace, machineTemplateName string) ([]*infrav1.ElfMachine, error) {
+	var machineList infrav1.ElfMachineList
+	if err := controllerClient.List(
+		ctx, &machineList,
+		client.InNamespace(namespace),
+		client.MatchingFields{infrav1.TemplateClonedFromNameAnnotationField: machineTemplateName}); err != nil {
+		return nil, err
+	}
+
+	machines := make([]*infrav1.ElfMachine, len(machineList.Items))
+	for i := range machineList.Items {
+		machines[i] = &machineList.Items[i]
+	}
+
+	return machines, nil
+}
+
 // IsControlPlaneMachine returns true if the provided resource is
 // a member of the control plane.
 func IsControlPlaneMachine(machine metav1.Object) bool {

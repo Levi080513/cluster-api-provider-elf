@@ -18,10 +18,16 @@ package v1beta1
 
 import (
 	"time"
+
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 )
 
 const (
 	// VMDisconnectionTimeout is the time allowed for the virtual machine to be disconnected.
 	// The virtual machine will be marked as deleted after the timeout.
 	VMDisconnectionTimeout = 1 * time.Minute
+
+	// TemplateClonedFromNameAnnotationField is used for indexing ElfMachine
+	// which have the TemplateClonedFromNameAnnotation set.
+	TemplateClonedFromNameAnnotationField = "metadata.annotations[" + clusterv1.TemplateClonedFromNameAnnotation + "]"
 )

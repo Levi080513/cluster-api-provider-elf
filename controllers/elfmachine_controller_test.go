@@ -33,6 +33,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/pointer"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
@@ -624,6 +625,75 @@ var _ = Describe("ElfMachineReconciler", func() {
 		})
 	})
 
+	Context("Reconcile VM resources", func() {
+		var elfMachineTemplate *infrav1.ElfMachineTemplate
+
+		BeforeEach(func() {
+			elfMachineTemplate = fake.NewMachineTemplate()
+			elfMachine.Annotations = map[string]string{clusterv1.TemplateClonedFromNameAnnotation: elfMachineTemplate.Name}
+		})
+
+		It("should not update VM resources when VM resources has not changed", func() {
+			vm := fake.NewTowerVM()
+			vm.Vcpu = util.TowerCPU(elfMachine.Spec.NumCPUs)
+			vm.Memory = util.TowerMemory(elfMachine.Spec.MemoryMiB)
+			ctrlContext := newCtrlContexts(elfCluster, cluster, elfMachine, machine, secret)
+			machineContext := newMachineContext(ctrlContext, elfCluster, cluster, elfMachine, machine)
+
+			reconciler := &ElfMachineReconciler{ControllerContext: ctrlContext, NewVMService: mockNewVMService}
+			ok, err := reconciler.reconcileVMResources(machineContext, vm)
+			Expect(ok).Should(BeTrue())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(elfMachine.Status.TaskRef).To(Equal(""))
+		})
+
+		It("should update VM CPUs when ElfMachine CPUs has been increased", func() {
+			vm := fake.NewTowerVM()
+			vm.Vcpu = util.TowerCPU(elfMachine.Spec.NumCPUs)
+			vm.Memory = util.TowerMemory(elfMachine.Spec.MemoryMiB)
+			elfMachine.Spec.NumCPUs *= 2
+			task := fake.NewTowerTask()
+			withTaskVM := fake.NewWithTaskVM(vm, task)
+			ctrlContext := newCtrlContexts(elfCluster, cluster, elfMachine, machine, secret)
+			machineContext := newMachineContext(ctrlContext, elfCluster, cluster, elfMachine, machine)
+			machineContext.VMService = mockVMService
+
+			mockVMService.EXPECT().Update(vm, elfMachine).Return(withTaskVM, nil)
+
+			reconciler := &ElfMachineReconciler{ControllerContext: ctrlContext, NewVMService: mockNewVMService}
+			ok, err := reconciler.reconcileVMResources(machineContext, vm)
+			Expect(ok).Should(BeFalse())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(elfMachine.Status.TaskRef).To(Equal(*task.ID))
+
+			mockVMService.EXPECT().Update(vm, elfMachine).Return(nil, errors.New("some error"))
+			reconciler = &ElfMachineReconciler{ControllerContext: ctrlContext, NewVMService: mockNewVMService}
+			ok, err = reconciler.reconcileVMResources(machineContext, vm)
+			Expect(ok).Should(BeFalse())
+			Expect(strings.Contains(err.Error(), "some error")).To(BeTrue())
+		})
+
+		It("should update VM memory when ElfMachine memory has been increased", func() {
+			vm := fake.NewTowerVM()
+			vm.Vcpu = util.TowerCPU(elfMachine.Spec.NumCPUs)
+			vm.Memory = util.TowerMemory(elfMachine.Spec.MemoryMiB)
+			elfMachine.Spec.MemoryMiB *= 2
+			task := fake.NewTowerTask()
+			withTaskVM := fake.NewWithTaskVM(vm, task)
+			ctrlContext := newCtrlContexts(elfCluster, cluster, elfMachine, machine, secret)
+			machineContext := newMachineContext(ctrlContext, elfCluster, cluster, elfMachine, machine)
+			machineContext.VMService = mockVMService
+
+			mockVMService.EXPECT().Update(vm, elfMachine).Return(withTaskVM, nil)
+
+			reconciler := &ElfMachineReconciler{ControllerContext: ctrlContext, NewVMService: mockNewVMService}
+			ok, err := reconciler.reconcileVMResources(machineContext, vm)
+			Expect(ok).Should(BeFalse())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(elfMachine.Status.TaskRef).To(Equal(*task.ID))
+		})
+	})
+
 	Context("Delete a ElfMachine", func() {
 		BeforeEach(func() {
 			cluster.Status.InfrastructureReady = true
@@ -1071,9 +1141,8 @@ func waitStaticIPAllocationSpec(mockNewVMService func(ctx goctx.Context, auth in
 	expectConditions(elfMachine, []conditionAssertion{{infrav1.VMProvisionedCondition, corev1.ConditionFalse, clusterv1.ConditionSeverityInfo, infrav1.WaitingForStaticIPAllocationReason}})
 }
 
-func newCtrlContexts(elfCluster *infrav1.ElfCluster, cluster *clusterv1.Cluster,
-	elfMachine *infrav1.ElfMachine, machine *clusterv1.Machine, secret *corev1.Secret) *context.ControllerContext {
-	ctrlMgrContext := fake.NewControllerManagerContext(cluster, elfCluster, elfMachine, machine, secret)
+func newCtrlContexts(objs ...runtime.Object) *context.ControllerContext {
+	ctrlMgrContext := fake.NewControllerManagerContext(objs...)
 	ctrlContext := &context.ControllerContext{
 		ControllerManagerContext: ctrlMgrContext,
 		Logger:                   ctrllog.Log,

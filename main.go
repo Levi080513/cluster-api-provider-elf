@@ -123,6 +123,10 @@ func main() {
 			return err
 		}
 
+		if err := controllers.AddMachineTemplateControllerToManager(ctx, mgr); err != nil {
+			return err
+		}
+
 		return nil
 	}
 

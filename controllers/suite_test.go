@@ -64,14 +64,6 @@ func setup() {
 
 	testEnv = helpers.NewTestEnvironment()
 
-	go func() {
-		fmt.Println("Starting the manager")
-		if err := testEnv.StartManager(testEnv.GetContext()); err != nil {
-			panic(fmt.Sprintf("failed to start the envtest manager: %v", err))
-		}
-	}()
-	<-testEnv.Manager.Elected()
-
 	// create manager pod namespace
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -88,6 +80,17 @@ func setup() {
 	if err := AddMachineControllerToManager(testEnv.GetContext(), testEnv.Manager); err != nil {
 		panic(fmt.Sprintf("unable to setup ElfMachine controller: %v", err))
 	}
+	if err := AddMachineTemplateControllerToManager(testEnv.GetContext(), testEnv.Manager); err != nil {
+		panic(fmt.Sprintf("unable to setup ElfMachineTemplate controller: %v", err))
+	}
+
+	go func() {
+		fmt.Println("Starting the manager")
+		if err := testEnv.StartManager(testEnv.GetContext()); err != nil {
+			panic(fmt.Sprintf("failed to start the envtest manager: %v", err))
+		}
+	}()
+	<-testEnv.Manager.Elected()
 }
 
 func teardown() {

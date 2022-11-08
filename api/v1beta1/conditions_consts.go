@@ -59,6 +59,14 @@ const (
 	// WaitingForNetworkAddressesReason (Severity=Info) documents a ElfMachine waiting for the the machine network
 	// settings to be reported after machine being powered on.
 	WaitingForNetworkAddressesReason = "WaitingForNetworkAddresses"
+
+	// UpdatingReason documents (Severity=Info) ElfMachine currently executing the update operation.
+	UpdatingReason = "Cloning"
+
+	// UpdatingFailedReason (Severity=Warning) documents a ElfMachine controller detecting
+	// an error while updating; those kind of errors are usually transient and failed provisioning
+	// are automatically re-tried by the controller.
+	UpdatingFailedReason = "CloningFailed"
 )
 
 // Conditions and Reasons related to make connections to a Tower. Can currently be used by ElfCluster and ElfMachine

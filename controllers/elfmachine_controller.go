@@ -91,7 +91,7 @@ func AddMachineControllerToManager(ctx *context.ControllerManagerContext, mgr ct
 		NewVMService:      service.NewVMService,
 	}
 
-	return ctrl.NewControllerManagedBy(mgr).
+	if err := ctrl.NewControllerManagedBy(mgr).
 		// Watch the controlled, infrastructure resource.
 		For(controlledType).
 		// Watch the CAPI resource that owns this infrastructure resource.
@@ -100,7 +100,11 @@ func AddMachineControllerToManager(ctx *context.ControllerManagerContext, mgr ct
 			handler.EnqueueRequestsFromMapFunc(capiutil.MachineToInfrastructureMapFunc(controlledTypeGVK)),
 		).
 		WithOptions(controller.Options{MaxConcurrentReconciles: ctx.MaxConcurrentReconciles}).
-		Complete(reconciler)
+		Complete(reconciler); err != nil {
+		return err
+	}
+
+	return indexByElfMachineTemplateName(ctx, mgr)
 }
 
 // Reconcile ensures the back-end state reflects the Kubernetes resource state intent.
@@ -435,6 +439,17 @@ func (r *ElfMachineReconciler) reconcileNormal(ctx *context.MachineContext) (rec
 
 		ctx.Logger.Info("Node providerID is not reconciled",
 			"namespace", ctx.ElfMachine.Namespace, "elfMachine", ctx.ElfMachine.Name)
+
+		return reconcile.Result{RequeueAfter: config.DefaultRequeueTimeout}, nil
+	}
+
+	// Hot update virtual machine resources
+	if ok, err := r.reconcileVMResources(ctx, vm); !ok || err != nil {
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
+		ctx.Logger.Info("VM resources are not reconciled", "vmRef", ctx.ElfMachine.Status.VMRef)
 
 		return reconcile.Result{RequeueAfter: config.DefaultRequeueTimeout}, nil
 	}
@@ -859,4 +874,20 @@ func (r *ElfMachineReconciler) isWaitingForStaticIPAllocation(ctx *context.Machi
 	}
 
 	return false
+}
+
+func (r *ElfMachineReconciler) reconcileVMResources(ctx *context.MachineContext, vm *models.VM) (bool, error) {
+	// Update the virtual machine memory and CPUs
+	if ctx.ElfMachine.Spec.NumCPUs > *vm.Vcpu || *util.TowerMemory(ctx.ElfMachine.Spec.MemoryMiB) > *vm.Memory {
+		withTaskVM, err := ctx.VMService.Update(vm, ctx.ElfMachine)
+		if err != nil {
+			return false, err
+		}
+
+		ctx.ElfMachine.SetTask(*withTaskVM.TaskID)
+
+		return false, nil
+	}
+
+	return true, nil
 }

@@ -43,6 +43,9 @@ func NewTowerVM() *models.VM {
 		LocalID:           &localID,
 		Status:            &status,
 		EntityAsyncStatus: (*models.EntityAsyncStatus)(util.TowerString("CREATING")),
+		Vcpu:              util.TowerCPU(6),
+		CPU:               &models.NestedCPU{Cores: util.TowerCPU(1), Sockets: util.TowerCPU(6)},
+		Memory:            util.TowerMemory(1024),
 	}
 }
 

@@ -84,6 +84,9 @@ func NewMachineObjects(elfCluster *infrav1.ElfCluster, cluster *clusterv1.Cluste
 			},
 		},
 		Spec: infrav1.ElfMachineSpec{
+			NumCPUs:           6,
+			NumCoresPerSocket: 1,
+			MemoryMiB:         1024,
 			Network: infrav1.NetworkSpec{
 				Devices: []infrav1.NetworkDeviceSpec{
 					{},
@@ -111,6 +114,26 @@ func NewMachineObjects(elfCluster *infrav1.ElfCluster, cluster *clusterv1.Cluste
 	}
 
 	return elfMachine, machine
+}
+
+func NewMachineTemplate() *infrav1.ElfMachineTemplate {
+	elfMachineTemplate := &infrav1.ElfMachineTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      names.SimpleNameGenerator.GenerateName("elfmachinetemplate-"),
+			Namespace: Namespace,
+		},
+		Spec: infrav1.ElfMachineTemplateSpec{
+			Template: infrav1.ElfMachineTemplateResource{
+				Spec: infrav1.ElfMachineSpec{
+					NumCPUs:           1,
+					NumCoresPerSocket: 1,
+					MemoryMiB:         1,
+				},
+			},
+		},
+	}
+
+	return elfMachineTemplate
 }
 
 func NewClusterAndMachineObjects() (*infrav1.ElfCluster, *clusterv1.Cluster, *infrav1.ElfMachine, *clusterv1.Machine, *corev1.Secret) {

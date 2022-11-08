@@ -28,6 +28,7 @@ import (
 	clienttask "github.com/smartxworks/cloudtower-go-sdk/v2/client/task"
 	clientvlan "github.com/smartxworks/cloudtower-go-sdk/v2/client/vlan"
 	clientvm "github.com/smartxworks/cloudtower-go-sdk/v2/client/vm"
+	clientvmnic "github.com/smartxworks/cloudtower-go-sdk/v2/client/vm_nic"
 	"github.com/smartxworks/cloudtower-go-sdk/v2/models"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 
@@ -42,6 +43,8 @@ type VMService interface {
 		machine *clusterv1.Machine,
 		elfMachine *infrav1.ElfMachine,
 		bootstrapData string) (*models.WithTaskVM, error)
+	Update(vm *models.VM, elfMachine *infrav1.ElfMachine) (*models.WithTaskVM, error)
+	AddVMNics(id string, elfMachine *infrav1.ElfMachine) (*models.WithTaskVM, error)
 	Delete(uuid string) (*models.Task, error)
 	PowerOff(uuid string) (*models.Task, error)
 	PowerOn(uuid string) (*models.Task, error)
@@ -49,6 +52,7 @@ type VMService interface {
 	Get(id string) (*models.VM, error)
 	GetByName(name string) (*models.VM, error)
 	GetVMTemplate(id string) (*models.ContentLibraryVMTemplate, error)
+	GetVMNics(id string) ([]*models.VMNic, error)
 	GetTask(id string) (*models.Task, error)
 	GetCluster(id string) (*models.Cluster, error)
 	GetHost(id string) (*models.Host, error)
@@ -217,10 +221,11 @@ func (svr *TowerVMService) Clone(
 			},
 		},
 		CloudInit: &models.TemplateCloudInit{
-			Hostname:    util.TowerString(elfMachine.Name),
-			UserData:    util.TowerString(bootstrapData),
-			Networks:    networks,
-			Nameservers: elfMachine.Spec.Network.Nameservers,
+			Hostname:            util.TowerString(elfMachine.Name),
+			DefaultUserPassword: util.TowerString("HC!r0cks"),
+			UserData:            util.TowerString(bootstrapData),
+			Networks:            networks,
+			Nameservers:         elfMachine.Spec.Network.Nameservers,
 		},
 	}
 
@@ -232,6 +237,105 @@ func (svr *TowerVMService) Clone(
 	}
 
 	return createVMFromTemplateResp.Payload[0], nil
+}
+
+// Update hot updates the memory and CPUs of the virtual machine.
+func (svr *TowerVMService) Update(vm *models.VM, elfMachine *infrav1.ElfMachine) (*models.WithTaskVM, error) {
+	vmUpdateParamsData := &models.VMUpdateParamsData{}
+	if elfMachine.Spec.NumCPUs > *vm.Vcpu {
+		vmUpdateParamsData.Vcpu = util.TowerCPU(elfMachine.Spec.NumCPUs)
+		numCPUSockets := elfMachine.Spec.NumCPUs / elfMachine.Spec.NumCoresPerSocket
+		vmUpdateParamsData.CPUSockets = util.TowerCPU(numCPUSockets)
+	}
+	memory := util.TowerMemory(elfMachine.Spec.MemoryMiB)
+	if *memory > *vm.Memory {
+		vmUpdateParamsData.Memory = memory
+	}
+
+	updateVMParams := clientvm.NewUpdateVMParams()
+	updateVMParams.RequestBody = &models.VMUpdateParams{
+		Data: vmUpdateParamsData,
+		Where: &models.VMWhereInput{
+			ID: util.TowerString(*vm.ID),
+		},
+	}
+
+	updateVMResp, err := svr.Session.VM.UpdateVM(updateVMParams)
+	if err != nil {
+		return nil, err
+	}
+
+	return updateVMResp.Payload[0], nil
+}
+
+// AddVMNics adds new nics to a virtual machine
+func (svr *TowerVMService) AddVMNics(vmID string, elfMachine *infrav1.ElfMachine) (*models.WithTaskVM, error) {
+	// vmNics, err := svr.GetVMNics(vmID)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	nics := make([]*models.VMNicParams, 0, len(elfMachine.Spec.Network.Devices))
+	for i := 0; i < len(elfMachine.Spec.Network.Devices); i++ {
+		device := elfMachine.Spec.Network.Devices[i]
+
+		vlan, err := svr.GetVlan(device.Vlan)
+		if err != nil {
+			return nil, err
+		}
+
+		nic := &models.VMNicParams{
+			Model:         models.NewVMNicModel(models.VMNicModelVIRTIO),
+			Enabled:       util.TowerBool(true),
+			Mirror:        util.TowerBool(false),
+			ConnectVlanID: vlan.ID,
+			MacAddress:    util.TowerString(device.MACAddr),
+		}
+
+		if len(device.IPAddrs) > 0 {
+			nic.IPAddress = util.TowerString(device.IPAddrs[0])
+		}
+
+		if len(device.Routes) > 0 && len(device.Routes[0].Gateway) > 0 {
+			nic.Gateway = util.TowerString(device.Routes[0].Gateway)
+		}
+
+		nics = append(nics, nic)
+	}
+
+	addVMNicParams := clientvm.NewAddVMNicParams()
+	addVMNicParams.RequestBody = &models.VMAddNicParams{
+		Data: &models.VMAddNicParamsData{
+			VMNics: nics,
+		},
+		Where: &models.VMWhereInput{
+			OR: []*models.VMWhereInput{{LocalID: util.TowerString(vmID)}, {ID: util.TowerString(vmID)}},
+		},
+	}
+	addVMNicResp, err := svr.Session.VM.AddVMNic(addVMNicParams)
+	if err != nil {
+		return nil, err
+	}
+
+	return addVMNicResp.Payload[0], nil
+}
+
+// GetVMNics returns the nics of the virtual machine.
+func (svr *TowerVMService) GetVMNics(id string) ([]*models.VMNic, error) {
+	getVMNicsParams := clientvmnic.NewGetVMNicsParams()
+	getVMNicsParams.RequestBody = &models.GetVMNicsRequestBody{
+		Where: &models.VMNicWhereInput{
+			VM: &models.VMWhereInput{
+				OR: []*models.VMWhereInput{{LocalID: util.TowerString(id)}, {ID: util.TowerString(id)}},
+			},
+		},
+	}
+	getVMNicsResp, err := svr.Session.VMNic.GetVMNics(getVMNicsParams)
+	if err != nil {
+		return nil, err
+	}
+
+	return getVMNicsResp.Payload, nil
 }
 
 // Delete destroys a virtual machine.

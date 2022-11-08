@@ -51,6 +51,21 @@ func (mr *MockVMServiceMockRecorder) AddLabelsToVM(vmID, labels interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLabelsToVM", reflect.TypeOf((*MockVMService)(nil).AddLabelsToVM), vmID, labels)
 }
 
+// AddVMNics mocks base method.
+func (m *MockVMService) AddVMNics(id string, elfMachine *v1beta1.ElfMachine) (*models.WithTaskVM, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddVMNics", id, elfMachine)
+	ret0, _ := ret[0].(*models.WithTaskVM)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddVMNics indicates an expected call of AddVMNics.
+func (mr *MockVMServiceMockRecorder) AddVMNics(id, elfMachine interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddVMNics", reflect.TypeOf((*MockVMService)(nil).AddVMNics), id, elfMachine)
+}
+
 // Clone mocks base method.
 func (m *MockVMService) Clone(elfCluster *v1beta1.ElfCluster, machine *v1beta10.Machine, elfMachine *v1beta1.ElfMachine, bootstrapData string) (*models.WithTaskVM, error) {
 	m.ctrl.T.Helper()
@@ -171,6 +186,21 @@ func (mr *MockVMServiceMockRecorder) GetTask(id interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTask", reflect.TypeOf((*MockVMService)(nil).GetTask), id)
 }
 
+// GetVMNics mocks base method.
+func (m *MockVMService) GetVMNics(id string) ([]*models.VMNic, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetVMNics", id)
+	ret0, _ := ret[0].([]*models.VMNic)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetVMNics indicates an expected call of GetVMNics.
+func (mr *MockVMServiceMockRecorder) GetVMNics(id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVMNics", reflect.TypeOf((*MockVMService)(nil).GetVMNics), id)
+}
+
 // GetVMTemplate mocks base method.
 func (m *MockVMService) GetVMTemplate(id string) (*models.ContentLibraryVMTemplate, error) {
 	m.ctrl.T.Helper()
@@ -244,6 +274,21 @@ func (m *MockVMService) ShutDown(uuid string) (*models.Task, error) {
 func (mr *MockVMServiceMockRecorder) ShutDown(uuid interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShutDown", reflect.TypeOf((*MockVMService)(nil).ShutDown), uuid)
+}
+
+// Update mocks base method.
+func (m *MockVMService) Update(vm *models.VM, elfMachine *v1beta1.ElfMachine) (*models.WithTaskVM, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Update", vm, elfMachine)
+	ret0, _ := ret[0].(*models.WithTaskVM)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Update indicates an expected call of Update.
+func (mr *MockVMServiceMockRecorder) Update(vm, elfMachine interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockVMService)(nil).Update), vm, elfMachine)
 }
 
 // UpsertLabel mocks base method.
