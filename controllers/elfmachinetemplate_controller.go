@@ -136,26 +136,34 @@ func (r *ElfMachineTemplateReconciler) reconcileNormal(ctx *context.MachineTempl
 			return reconcile.Result{}, errors.Wrapf(err, "failed to init patch helper for %s %s/%s", machine.GroupVersionKind(), machine.Namespace, machine.Name)
 		}
 
-		numCPUs := machine.Spec.NumCPUs
-		memoryMiB := machine.Spec.MemoryMiB
-
-		if numCPUs == template.NumCPUs && memoryMiB == template.MemoryMiB {
+		if !ShouldELFMachineNeedUpdate(template, *machine) {
 			continue
 		}
 
 		machine.Spec.NumCPUs = template.NumCPUs
 		machine.Spec.MemoryMiB = template.MemoryMiB
+		machine.Spec.Network = template.Network
 
 		if err := patchHelper.Patch(ctx, machine); err != nil {
 			return reconcile.Result{}, errors.Wrapf(err, "failed to patch ElfMachine %s to sync VM resources from ElfMachineTemplate %s", machine.Name, ctx.ElfMachineTemplate.Name)
 		}
 
-		ctx.Logger.Info(fmt.Sprintf("Sync ElfMachine %s VM resources from ElfMachineTemplate %s successfully, CPUs from %d to %d, memory from %d to %d",
-			machine.Name, ctx.ElfMachineTemplate.Name,
-			numCPUs, machine.Spec.NumCPUs,
-			memoryMiB, machine.Spec.MemoryMiB,
-		))
+		ctx.Logger.Info(fmt.Sprintf("Sync ElfMachine %s VM resources from ElfMachineTemplate %s successfully.", machine.Name, ctx.ElfMachineTemplate.Name))
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func ShouldELFMachineNeedUpdate(template infrav1.ElfMachineSpec, machine infrav1.ElfMachine) bool {
+	numCPUs := machine.Spec.NumCPUs
+	memoryMiB := machine.Spec.MemoryMiB
+	if numCPUs != template.NumCPUs || memoryMiB != template.MemoryMiB {
+		return true
+	}
+
+	if !reflect.DeepEqual(template.Network.Devices, machine.Spec.Network.Devices) {
+		return true
+	}
+
+	return false
 }

@@ -638,6 +638,9 @@ func (r *ElfMachineReconciler) reconcileVMTask(ctx *context.MachineContext, vm *
 	var err error
 	var task *models.Task
 	if ctx.ElfMachine.HasTask() {
+		if ctx.ElfMachine.Spec.ProviderID != nil {
+			conditions.MarkFalse(ctx.ElfMachine, infrav1.VMProvisionedCondition, infrav1.UpdatingReason, clusterv1.ConditionSeverityWarning, err.Error())
+		}
 		task, err = ctx.VMService.GetTask(taskRef)
 		if err != nil {
 			if service.IsTaskNotFound(err) {
@@ -889,5 +892,29 @@ func (r *ElfMachineReconciler) reconcileVMResources(ctx *context.MachineContext,
 		return false, nil
 	}
 
+	needUpdate, err := VMNicsNeedUpdate(ctx, vm)
+	if err != nil {
+		return false, err
+	}
+
+	if needUpdate {
+		withTaskVM, err := ctx.VMService.AddVMNics(*vm.ID, ctx.ElfMachine)
+		if err != nil {
+			return false, err
+		}
+
+		ctx.ElfMachine.SetTask(*withTaskVM.TaskID)
+
+		return false, nil
+	}
+
 	return true, nil
+}
+
+func VMNicsNeedUpdate(ctx *context.MachineContext, vm *models.VM) (bool, error) {
+	if len(vm.VMNics) < len(ctx.ElfMachine.Spec.Network.Devices) {
+		return true, nil
+	}
+
+	return false, nil
 }
