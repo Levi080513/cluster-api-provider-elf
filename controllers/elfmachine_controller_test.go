@@ -1688,6 +1688,47 @@ var _ = Describe("ElfMachineReconciler", func() {
 			Expect(ok).To(BeFalse())
 			Expect(err).To(HaveOccurred())
 		})
+
+		It("should delete k8s node before destroying VM.", func() {
+			vm := fake.NewTowerVM()
+			vm.EntityAsyncStatus = nil
+			status := models.VMStatusSTOPPED
+			vm.Status = &status
+			task := fake.NewTowerTask()
+			elfMachine.Status.VMRef = *vm.LocalID
+			ctrlContext := newCtrlContexts(elfCluster, cluster, elfMachine, machine, secret, md)
+			// before reconcile, create k8s node for VM.
+			node := &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: *vm.Name,
+				},
+			}
+			err := ctrlContext.Client.Create(ctx, node)
+			Expect(err).Should(BeNil())
+
+			fake.InitOwnerReferences(ctrlContext, elfCluster, cluster, elfMachine, machine)
+
+			mockVMService.EXPECT().Get(elfMachine.Status.VMRef).Return(vm, nil)
+			mockVMService.EXPECT().Delete(elfMachine.Status.VMRef).Return(task, nil)
+
+			reconciler := &ElfMachineReconciler{ControllerContext: ctrlContext, NewVMService: mockNewVMService}
+			elfMachineKey := capiutil.ObjectKey(elfMachine)
+			result, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: elfMachineKey})
+			Expect(result.RequeueAfter).NotTo(BeZero())
+			Expect(err).To(BeZero())
+
+			// check k8s node has been deleted,
+			err = ctrlContext.Client.Get(ctx, client.ObjectKeyFromObject(node), node)
+			Expect(err).ShouldNot(BeNil())
+			Expect(node).Should(Equal(nil))
+
+			Expect(logBuffer.String()).To(ContainSubstring("Waiting for VM to be deleted"))
+			elfMachine = &infrav1.ElfMachine{}
+			Expect(reconciler.Client.Get(reconciler, elfMachineKey, elfMachine)).To(Succeed())
+			Expect(elfMachine.Status.VMRef).To(Equal(*vm.LocalID))
+			Expect(elfMachine.Status.TaskRef).To(Equal(*task.ID))
+			expectConditions(elfMachine, []conditionAssertion{{infrav1.VMProvisionedCondition, corev1.ConditionFalse, clusterv1.ConditionSeverityInfo, clusterv1.DeletingReason}})
+		})
 	})
 
 	Context("Reconcile static IP allocation", func() {

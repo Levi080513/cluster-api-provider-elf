@@ -275,6 +275,12 @@ func (r *ElfMachineReconciler) reconcileDeleteVM(ctx *context.MachineContext) er
 		return nil
 	}
 
+	// Before destroying VM, attempt to delete kubernetes node.
+	err = r.deleteNode(ctx, *vm.Name)
+	if err != nil {
+		ctx.Logger.Error(err, "failed to delete node", "elfMachine", *vm.Name)
+	}
+
 	ctx.Logger.Info("Destroying VM",
 		"vmRef", ctx.ElfMachine.Status.VMRef, "taskRef", ctx.ElfMachine.Status.TaskRef)
 
@@ -1379,4 +1385,28 @@ func (r *ElfMachineReconciler) isWaitingForStaticIPAllocation(ctx *context.Machi
 	}
 
 	return false
+}
+
+// deleteNode attempts to delete the node corresponding to the VM.
+// This is necessary since CAPI does not the nodeRef field on the owner Machine object
+// until the node moves to Ready state. Hence, on Machine deletion it is unable to delete
+// the kubernetes node corresponding to the VM.
+func (r *ElfMachineReconciler) deleteNode(ctx *context.MachineContext, nodeName string) error {
+	kubeClient, err := util.NewKubeClient(ctx, ctx.Client, ctx.Cluster)
+	if err != nil {
+		return errors.Wrapf(err, "failed to get client for Cluster %s/%s", ctx.Cluster.Namespace, ctx.Cluster.Name)
+	}
+
+	// Attempt to delete the corresponding node.
+	err = kubeClient.CoreV1().Nodes().Delete(ctx, nodeName, metav1.DeleteOptions{})
+	// k8s node is already deleted.
+	if err != nil && apierrors.IsNotFound(err) {
+		return nil
+	}
+
+	if err != nil {
+		return errors.Wrapf(err, "failed to delete node %s for Cluster %s/%s", nodeName, ctx.Cluster.Namespace, ctx.Cluster.Name)
+	}
+
+	return nil
 }
