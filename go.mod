@@ -172,3 +172,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
+
+replace github.com/smartxworks/host-config-agent-api => newgh.smartx.com/kubesmart/host-config-agent v0.1.16-0.20240823035246-0577e8c91431

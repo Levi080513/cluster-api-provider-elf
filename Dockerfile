@@ -24,6 +24,7 @@ WORKDIR /workspace
 # Run this with docker build --build_arg $(go env GOPROXY) to override the goproxy
 ARG goproxy=https://goproxy.cn,direct
 ENV GOPROXY=$goproxy
+ENV GONOPROXY="newgh.smartx.com"
 
 # Copy the Go Modules manifests
 COPY go.mod go.mod
